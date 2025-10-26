@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Admin Dashboard - UCAS Portal</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      color: #667eea;
+      margin-bottom: 20px;
+      font-size: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"],
+    input[type="file"],
+    select {
+      width: 100%;
+      max-width: 400px;
+      padding: 10px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input[type="file"] {
+      padding: 8px;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #5568d3;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .export-btn {
+      background: #10b981;
+    }
+
+    .export-btn:hover {
+      background: #059669;
+    }
+
+    .message {
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-top: 15px;
+      display: none;
+    }
+
+    .message.show {
+      display: block;
+    }
+
+    .message.success {
+      background: #d1fae5;
+      border: 1px solid #6ee7b7;
+      color: #065f46;
+    }
+
+    .message.error {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+    }
+
+    .results {
+      margin-top: 20px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    th {
+      background: #f9fafb;
+      font-weight: 600;
+      color: #333;
+    }
+
+    tr:hover {
+      background: #f9fafb;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge.video {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge.ai {
+      background: #fce7f3;
+      color: #9f1239;
+    }
+
+    .badge.unassigned {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+
+    .help-text {
+      color: #888;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    .flex {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .no-results {
+      color: #888;
+      font-style: italic;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .home-link {
+      display: inline-block;
+      color: #667eea;
+      text-decoration: none;
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+
+    .home-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="home-link">← Back to Student Portal</a>
+    
+    <h1>🔐 Admin Dashboard</h1>
+    <p class="subtitle">Manage student records and group assignments</p>
+
+    <!-- CSV Upload Section -->
+    <div class="section">
+      <h2>📤 Upload Student CSV</h2>
+      <form id="uploadForm">
+        <div class="form-group">
+          <label for="csvFile">Select CSV File</label>
+          <input type="file" id="csvFile" name="csvFile" accept=".csv" required />
+          <div class="help-text">CSV format: ucas_code,email (header row required)</div>
+        </div>
+        <button type="submit" id="uploadBtn">Upload CSV</button>
+        <div id="uploadMessage" class="message"></div>
+      </form>
+    </div>
+
+    <!-- Search Section -->
+    <div class="section">
+      <h2>🔍 Search Students</h2>
+      <form id="searchForm">
+        <div class="flex">
+          <div class="form-group">
+            <label for="searchCode">UCAS Code</label>
+            <input type="text" id="searchCode" name="ucas_code" placeholder="0123456789" maxlength="10" />
+          </div>
+          <div class="form-group">
+            <label for="searchGroup">Group</label>
+            <select id="searchGroup" name="group">
+              <option value="">All Groups</option>
+              <option value="VIDEO">Video Course</option>
+              <option value="AI">AI Group</option>
+              <option value="null">Unassigned</option>
+            </select>
+          </div>
+          <button type="submit" id="searchBtn">Search</button>
+        </div>
+        <div id="searchMessage" class="message"></div>
+      </form>
+
+      <div id="results" class="results"></div>
+    </div>
+
+    <!-- Export Section -->
+    <div class="section">
+      <h2>📥 Export Data</h2>
+      <p style="margin-bottom: 15px; color: #666;">Download all student records as CSV</p>
+      <button class="export-btn" id="exportBtn">Download CSV Export</button>
+      <div id="exportMessage" class="message" style="margin-top: 15px;"></div>
+    </div>
+  </div>
+
+  <script>
+    // CSV Upload
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadMessage = document.getElementById('uploadMessage');
+
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const fileInput = document.getElementById('csvFile');
+      const file = fileInput.files[0];
+      
+      if (!file) {
+        showMessage(uploadMessage, 'error', 'Please select a file');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('csvFile', file);
+
+      try {
+        const response = await fetch('/admin/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showMessage(uploadMessage, 'success', 
+            `Successfully processed ${data.processed || 0} records. ` +
+            `Created: ${data.created || 0}, Updated: ${data.updated || 0}`
+          );
+          fileInput.value = '';
+        } else {
+          showMessage(uploadMessage, 'error', data.error || 'Upload failed');
+        }
+      } catch (error) {
+        showMessage(uploadMessage, 'error', 'Connection error. Please try again.');
+      }
+    });
+
+    // Search
+    const searchForm = document.getElementById('searchForm');
+    const searchMessage = document.getElementById('searchMessage');
+    const resultsDiv = document.getElementById('results');
+
+    searchForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const ucasCode = document.getElementById('searchCode').value.trim();
+      const group = document.getElementById('searchGroup').value;
+
+      const params = new URLSearchParams();
+      if (ucasCode) params.append('ucas_code', ucasCode);
+      if (group) params.append('group', group);
+
+      try {
+        const response = await fetch(`/admin/search?${params.toString()}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          displayResults(data.results);
+          searchMessage.classList.remove('show');
+        } else {
+          showMessage(searchMessage, 'error', data.error || 'Search failed');
+          resultsDiv.innerHTML = '';
+        }
+      } catch (error) {
+        showMessage(searchMessage, 'error', 'Connection error. Please try again.');
+        resultsDiv.innerHTML = '';
+      }
+    });
+
+    function displayResults(results) {
+      if (!results || results.length === 0) {
+        resultsDiv.innerHTML = '<div class="no-results">No results found</div>';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>UCAS Code</th>
+              <th>Group</th>
+              <th>Email</th>
+              <th>Created</th>
+              <th>Email Sent</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      results.forEach(row => {
+        const groupBadge = row.group_name 
+          ? `<span class="badge ${row.group_name.toLowerCase()}">${row.group_name === 'VIDEO' ? 'Video Course' : 'AI Group'}</span>`
+          : '<span class="badge unassigned">Unassigned</span>';
+        
+        const email = row.email || '<em>No email</em>';
+        const created = new Date(row.created_at).toLocaleDateString();
+        const emailSent = row.email_last_sent_at 
+          ? new Date(row.email_last_sent_at).toLocaleDateString()
+          : '—';
+
+        html += `
+          <tr>
+            <td><code>${row.ucas_code}</code></td>
+            <td>${groupBadge}</td>
+            <td>${email}</td>
+            <td>${created}</td>
+            <td>${emailSent}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      resultsDiv.innerHTML = html;
+    }
+
+    function showMessage(element, type, text) {
+      element.className = `message ${type} show`;
+      element.textContent = text;
+    }
+
+    // Attach event listener for export button
+    document.getElementById('exportBtn').addEventListener('click', exportCSV);
+
+    async function exportCSV() {
+      const exportMsg = document.getElementById('exportMessage');
+      exportMsg.className = 'message';
+      
+      try {
+        console.log('Fetching CSV export...');
+        
+        const response = await fetch('/admin/export.csv', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Accept': 'text/csv'
+          }
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Export failed:', response.status, errorText);
+          alert('Export failed: ' + response.status + '. Please check the test export results.');
+          return;
+        }
+        
+        const blob = await response.blob();
+        console.log('Creating download, blob size:', blob.size);
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `students-export-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        
+        console.log('Triggering download...');
+        a.click();
+        
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          console.log('Download cleanup complete');
+        }, 100);
+        
+        exportMsg.className = 'message success show';
+        exportMsg.textContent = '✅ CSV download started!';
+      } catch (error) {
+        console.error('Export error:', error);
+        exportMsg.className = 'message error show';
+        exportMsg.textContent = '❌ Export failed: ' + error.message;
+      }
+    }
+  </script>
+</body>
+</html>

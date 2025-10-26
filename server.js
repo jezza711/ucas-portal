@@ -1,0 +1,537 @@
+require('dotenv').config();
+const express = require('express');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const basicAuth = require('express-basic-auth');
+const multer = require('multer');
+const { parse } = require('csv-parse/sync');
+const { stringify } = require('csv-stringify/sync');
+const path = require('path');
+
+const { db, statements } = require('./db/init');
+const { sendGroupEmail } = require('./email');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Constants
+const GROUP_LABELS = {
+  VIDEO: 'Video Course',
+  AI: 'AI Group',
+};
+
+const PDF_URLS = {
+  VIDEO: process.env.VIDEO_PDF_URL,
+  AI: process.env.AI_PDF_URL,
+};
+
+// ============================================================================
+// MIDDLEWARE
+// ============================================================================
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+    },
+  },
+}));
+
+// Logging
+app.use(morgan('tiny'));
+
+// Body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Static files
+app.use(express.static('public'));
+
+// Rate limiting for public routes
+const publicRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+// Rate limiting for webhook routes
+const webhookRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000, // Higher limit for automated webhooks
+  message: { error: 'Rate limit exceeded' }
+});
+
+// Basic Auth for admin routes
+const adminAuth = basicAuth({
+  users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
+  challenge: true,
+  realm: 'UCAS Portal Admin',
+});
+
+// Webhook authentication middleware
+function webhookAuth(req, res, next) {
+  const secret = req.headers['x-webhook-secret'];
+  
+  if (!secret || secret !== process.env.WEBHOOK_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid webhook secret' });
+  }
+  
+  next();
+}
+
+// Multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  }
+});
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Validate and normalize UCAS code
+ * @param {string} code - Raw UCAS code input
+ * @returns {Object} { valid: boolean, code?: string, error?: string }
+ */
+function validateUcasCode(code) {
+  if (!code) {
+    return { valid: false, error: 'UCAS code is required' };
+  }
+
+  // Remove spaces and convert to uppercase
+  const normalized = String(code).replace(/\s/g, '').toUpperCase();
+
+  // Check if exactly 10 digits
+  if (!/^[0-9]{10}$/.test(normalized)) {
+    return { valid: false, error: 'UCAS code must be exactly 10 digits' };
+  }
+
+  return { valid: true, code: normalized };
+}
+
+/**
+ * Randomise student to VIDEO or AI group (50-50)
+ * @returns {string} 'VIDEO' or 'AI'
+ */
+function randomiseGroup() {
+  return Math.random() < 0.5 ? 'VIDEO' : 'AI';
+}
+
+/**
+ * Get current ISO datetime string
+ * @returns {string}
+ */
+function now() {
+  return new Date().toISOString();
+}
+
+// ============================================================================
+// STUDENT ROUTES
+// ============================================================================
+
+/**
+ * POST /randomise - Student randomisation endpoint
+ */
+app.post('/randomise', publicRateLimit, async (req, res) => {
+  try {
+    const { ucas_code, email } = req.body;
+
+    // Validate UCAS code
+    const validation = validateUcasCode(ucas_code);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    // Validate and sanitize email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Valid email address is required' });
+    }
+    const sanitizedEmail = email.trim().toLowerCase();
+
+    const code = validation.code;
+
+    // Check if student already exists
+    const existing = statements.findByCode.get(code);
+
+    if (existing && existing.group_name) {
+      // Already assigned - return existing assignment
+      return res.json({
+        already_assigned: true,
+        group_name: existing.group_name,
+        group_label: GROUP_LABELS[existing.group_name],
+        pdf_url: PDF_URLS[existing.group_name],
+      });
+    }
+
+    // New assignment needed
+    const assignedGroup = randomiseGroup();
+    const timestamp = now();
+
+    if (existing) {
+      // Student exists but no group assigned yet - update group and email
+      statements.updateGroup.run(assignedGroup, timestamp, code);
+      statements.upsertEmail.run(code, sanitizedEmail, timestamp, timestamp);
+    } else {
+      // Completely new student - insert with email
+      statements.insert.run(code, assignedGroup, sanitizedEmail, timestamp, timestamp);
+    }
+
+    // Send email with the assigned group pack
+    let emailSent = false;
+    const emailResult = await sendGroupEmail({
+      to: sanitizedEmail,
+      ucas_code: code,
+      group_name: assignedGroup,
+    });
+
+    if (emailResult.ok && !emailResult.skipped) {
+      emailSent = true;
+      statements.updateEmailSent.run(timestamp, timestamp, code);
+    }
+
+    return res.json({
+      already_assigned: false,
+      group_name: assignedGroup,
+      group_label: GROUP_LABELS[assignedGroup],
+      pdf_url: PDF_URLS[assignedGroup],
+      email_sent: emailSent,
+    });
+
+  } catch (error) {
+    console.error('Error in /randomise:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// ADMIN ROUTES
+// ============================================================================
+
+/**
+ * GET /admin - Admin dashboard HTML
+ */
+app.get('/admin', adminAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+/**
+ * POST /admin/upload - CSV upload and upsert
+ */
+app.post('/admin/upload', adminAuth, upload.single('csvFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const csvContent = req.file.buffer.toString('utf-8');
+    
+    // Parse CSV
+    let records;
+    try {
+      records = parse(csvContent, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+      });
+    } catch (parseError) {
+      return res.status(400).json({ error: 'Invalid CSV format' });
+    }
+
+    let created = 0;
+    let updated = 0;
+    let errors = [];
+
+    for (const record of records) {
+      const { ucas_code, email } = record;
+
+      // Validate UCAS code
+      const validation = validateUcasCode(ucas_code);
+      if (!validation.valid) {
+        errors.push(`Invalid UCAS code: ${ucas_code}`);
+        continue;
+      }
+
+      const code = validation.code;
+      const timestamp = now();
+
+      try {
+        const existing = statements.findByCode.get(code);
+        
+        if (existing) {
+          // Update email if provided
+          if (email) {
+            statements.upsertEmail.run(code, email, timestamp, timestamp);
+            updated++;
+          }
+        } else {
+          // Create new record without group assignment
+          statements.insert.run(code, null, email || null, timestamp, timestamp);
+          created++;
+        }
+      } catch (dbError) {
+        errors.push(`Database error for ${code}: ${dbError.message}`);
+      }
+    }
+
+    return res.json({
+      ok: true,
+      processed: records.length,
+      created,
+      updated,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+
+  } catch (error) {
+    console.error('Error in /admin/upload:', error);
+    return res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+/**
+ * GET /admin/search - Search students
+ */
+app.get('/admin/search', adminAuth, (req, res) => {
+  try {
+    const { ucas_code, group } = req.query;
+
+    let results;
+
+    if (ucas_code && group) {
+      // Search by both code and group
+      const codePattern = `%${ucas_code}%`;
+      const groupValue = group === 'null' ? null : group;
+      
+      if (groupValue === null) {
+        // Handle null group separately
+        results = db.prepare(
+          'SELECT * FROM students WHERE ucas_code LIKE ? AND group_name IS NULL'
+        ).all(codePattern);
+      } else {
+        results = statements.searchByCodeAndGroup.all(codePattern, groupValue);
+      }
+    } else if (ucas_code) {
+      // Search by code only
+      const codePattern = `%${ucas_code}%`;
+      results = statements.searchByCode.all(codePattern);
+    } else if (group) {
+      // Search by group only
+      if (group === 'null') {
+        results = db.prepare('SELECT * FROM students WHERE group_name IS NULL').all();
+      } else {
+        results = statements.searchByGroup.all(group);
+      }
+    } else {
+      // No filters - return all
+      results = statements.getAll.all();
+    }
+
+    return res.json({ results });
+
+  } catch (error) {
+    console.error('Error in /admin/search:', error);
+    return res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+/**
+ * GET /admin/export.csv - Export all students as CSV
+ */
+app.get('/admin/export.csv', adminAuth, (req, res) => {
+  try {
+    const students = statements.getAll.all();
+
+    const csv = stringify(students, {
+      header: true,
+      columns: ['ucas_code', 'group_name', 'email', 'created_at', 'updated_at', 'email_last_sent_at']
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="students-export.csv"');
+    res.send(csv);
+
+  } catch (error) {
+    console.error('Error in /admin/export.csv:', error);
+    return res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+// ============================================================================
+// WEBHOOK ROUTES
+// ============================================================================
+
+/**
+ * POST /api/jisc-webhook - JISC student upsert webhook
+ */
+app.post('/api/jisc-webhook', webhookRateLimit, webhookAuth, async (req, res) => {
+  try {
+    const { ucas_code, email } = req.body;
+
+    if (!ucas_code) {
+      return res.status(400).json({ error: 'ucas_code is required' });
+    }
+
+    // Validate UCAS code
+    const validation = validateUcasCode(ucas_code);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const code = validation.code;
+    const timestamp = now();
+
+    // Upsert the record
+    statements.upsertEmail.run(code, email || null, timestamp, timestamp);
+
+    return res.json({ 
+      ok: true, 
+      ucas_code: code,
+      message: 'Student record upserted successfully' 
+    });
+
+  } catch (error) {
+    console.error('Error in /api/jisc-webhook:', error);
+    return res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+/**
+ * POST /api/hooks/send-pack - Send group pack email webhook
+ */
+app.post('/api/hooks/send-pack', webhookRateLimit, webhookAuth, async (req, res) => {
+  try {
+    const { ucas_code, email } = req.body;
+
+    if (!ucas_code) {
+      return res.status(400).json({ error: 'ucas_code is required' });
+    }
+
+    // Validate UCAS code
+    const validation = validateUcasCode(ucas_code);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const code = validation.code;
+
+    // Look up student
+    const student = statements.findByCode.get(code);
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    if (!student.group_name) {
+      return res.status(400).json({ error: 'Student has not been assigned to a group yet' });
+    }
+
+    // Determine email to use
+    const targetEmail = email || student.email;
+
+    if (!targetEmail) {
+      return res.status(400).json({ error: 'No email address available for this student' });
+    }
+
+    // Send email
+    const emailResult = await sendGroupEmail({
+      to: targetEmail,
+      ucas_code: code,
+      group_name: student.group_name,
+    });
+
+    if (!emailResult.ok) {
+      return res.status(500).json({ 
+        error: 'Email send failed', 
+        details: emailResult.error 
+      });
+    }
+
+    // Update email_last_sent_at
+    if (!emailResult.skipped) {
+      const timestamp = now();
+      statements.updateEmailSent.run(timestamp, timestamp, code);
+    }
+
+    return res.json({ 
+      ok: true,
+      email_sent: !emailResult.skipped,
+      skipped: emailResult.skipped || false,
+      message: emailResult.skipped 
+        ? 'Email skipped (no RESEND_API_KEY configured)' 
+        : 'Email sent successfully'
+    });
+
+  } catch (error) {
+    console.error('Error in /api/hooks/send-pack:', error);
+    return res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
+// ============================================================================
+// HEALTH CHECK
+// ============================================================================
+
+app.get('/health', (req, res) => {
+  res.json({ ok: true });
+});
+
+// ============================================================================
+// ERROR HANDLERS
+// ============================================================================
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  
+  // Multer file upload errors
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ error: err.message });
+  }
+  
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// ============================================================================
+// START SERVER
+// ============================================================================
+
+const server = app.listen(PORT, () => {
+  console.log('');
+  console.log('🚀 UCAS Randomisation Portal');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`📍 Server running on http://localhost:${PORT}`);
+  console.log(`🎓 Student portal: http://localhost:${PORT}`);
+  console.log(`🔐 Admin dashboard: http://localhost:${PORT}/admin`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('');
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, closing server gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    db.close();
+    console.log('Database connection closed');
+    process.exit(0);
+  });
+});
