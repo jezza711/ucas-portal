@@ -5,12 +5,12 @@ A simple web application that randomises students into VIDEO or AI groups based 
 ## Features
 
 - **Student Portal**: Enter UCAS code, get assigned to a group, receive PDF link
-- **Admin Dashboard**: Upload CSV, search records, export data
+- **Admin Dashboard**: Search records, export data
 - **Webhooks**: JISC integration and email trigger endpoints
 - **Email**: Automatic pack delivery via Resend
 - **Database**: SQLite with persistent storage
 - **Reporting**: Optional Google Sheets sync for every student record
-- **Course Packs**: Upload fresh PDF packs in the admin dashboard without redeploying
+- **Course Packs**: Serve downloadable PDFs without redeploying
 
 ## Tech Stack
 
@@ -73,8 +73,7 @@ Re-entering the same code shows your existing assignment.
 Visit `http://localhost:3000/admin` (requires Basic Auth: username and password from `.env`)
 
 **Features:**
-- Upload CSV with columns: `ucas_code,email`
-- Search by UCAS code or group name
+- Search by UCAS code, email address, or group name
 - Export all records as CSV
 
 ### Webhooks
@@ -111,14 +110,13 @@ Sends the assigned group's PDF pack to the student.
 
 ## Course Pack PDFs
 
-Admins can replace the downloadable packs any time without touching the codebase:
+Configure the PDF links via environment variables or static files you ship with the app:
 
-1. Download the new PDF from the email your boss sends you.
-2. Sign in to `/admin` and use the **"Upload Course Pack PDF"** form.
-3. Choose the relevant group (Video or AI) and upload the PDF.
-4. The file is stored under `/packs/{video|ai}-pack.pdf`, immediately used by the student portal and outgoing emails.
+1. Host the Video and AI course packs (Render disk, S3, Google Drive direct link, etc.).
+2. Set `VIDEO_PDF_URL` and `AI_PDF_URL` to those fully qualified URLs.
+3. (Optional) If you ship the PDFs with the app, place them in the `/packs` directory and expose them via your CDN/Render disk.
 
-> Tip: Set the `PUBLIC_BASE_URL` env var (e.g. `https://your-service.onrender.com`) so emails get an absolute link. The portal itself works with the relative `/packs/...` path.
+> Tip: Set the `PUBLIC_BASE_URL` env var (e.g. `https://your-service.onrender.com`) so emails get an absolute link even when the portal itself serves `/packs/...` paths.
 
 ## Google Sheets Sync
 
@@ -136,7 +134,7 @@ The server can mirror every student record to a Google Sheet for quick reporting
 
 - Columns: `UCAS Code`, `Group Name`, `Email`, `Created At`, `Updated At`, `Email Last Sent At`.
 - Every `/randomise`, webhook, or manual email send updates a single row (upserted on UCAS code).
-- CSV uploads and server start trigger a full sheet refresh so the Google Sheet always matches the SQLite database.
+- Server start triggers a full sheet refresh so the Google Sheet always matches the SQLite database.
 
 > **Heads-up:** A bulk refresh overwrites the entire tab, so use a dedicated sheet/tab for this integration.
 
@@ -162,7 +160,7 @@ See `TESTING.md` for curl command examples to test all endpoints.
 
 **Important**: The database file is stored in the `db/` directory. Ensure this directory is backed by a persistent volume, otherwise data will be lost on restarts.
 
-Uploads created through the admin dashboard live under the `uploads/packs` directory. Mount your Render disk to a parent path (e.g. `/opt/render/project/src/uploads`) if you want course packs to persist across deploys.
+If you serve PDFs from disk, store them under `uploads/packs` (or your configured `PACKS_DIR`) and mount that directory on a persistent disk so the files survive deploys.
 
 ### Alternative: Vercel
 
@@ -199,7 +197,7 @@ See `.env.example` for all configuration options. Key additions:
 
 - `PUBLIC_BASE_URL` – Base URL (with protocol) used to build absolute `/packs/...` links in outgoing emails.
 - `GOOGLE_*` – Service account credentials for the optional sheet sync.
-- `PACKS_DIR` (optional) – Custom absolute path for storing uploaded PDFs; defaults to `<project>/uploads/packs`.
+- `PACKS_DIR` (optional) – Custom absolute path for serving on-disk PDFs; defaults to `<project>/uploads/packs`.
 
 ## License
 

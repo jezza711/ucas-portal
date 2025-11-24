@@ -186,6 +186,7 @@
       display: flex;
       gap: 10px;
       align-items: flex-end;
+      flex-wrap: wrap;
     }
 
     .no-results {
@@ -215,44 +216,6 @@
     <h1>🔐 Admin Dashboard</h1>
     <p class="subtitle">Manage student records and group assignments</p>
 
-    <!-- CSV Upload Section -->
-    <div class="section">
-      <h2>📤 Upload Student CSV</h2>
-      <form id="uploadForm">
-        <div class="form-group">
-          <label for="csvFile">Select CSV File</label>
-          <input type="file" id="csvFile" name="csvFile" accept=".csv" required />
-          <div class="help-text">CSV format: ucas_code,email (header row required)</div>
-        </div>
-        <button type="submit" id="uploadBtn">Upload CSV</button>
-        <div id="uploadMessage" class="message"></div>
-      </form>
-    </div>
-
-    <!-- Course Pack Upload Section -->
-    <div class="section">
-      <h2>📚 Upload Course Pack PDF</h2>
-      <form id="packForm">
-        <div class="form-group">
-          <label for="packGroup">Select Group</label>
-          <select id="packGroup" name="group">
-            <option value="VIDEO">Video Course</option>
-            <option value="AI">AI Group</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="packFile">PDF File</label>
-          <input type="file" id="packFile" name="pdfFile" accept="application/pdf" required />
-          <div class="help-text">This file will be available at /packs/[group]-pack.pdf</div>
-        </div>
-        <button type="submit" id="packBtn">Upload PDF</button>
-        <div id="packMessage" class="message"></div>
-      </form>
-      <p class="help-text" style="margin-top: 12px;">
-        Upload the updated PDF your boss sends you and the student portal + emails will immediately use it.
-      </p>
-    </div>
-
     <!-- Search Section -->
     <div class="section">
       <h2>🔍 Search Students</h2>
@@ -261,6 +224,10 @@
           <div class="form-group">
             <label for="searchCode">UCAS Code</label>
             <input type="text" id="searchCode" name="ucas_code" placeholder="0123456789" maxlength="10" />
+          </div>
+          <div class="form-group">
+            <label for="searchEmail">Email</label>
+            <input type="text" id="searchEmail" name="email" placeholder="student@example.com" />
           </div>
           <div class="form-group">
             <label for="searchGroup">Group</label>
@@ -289,46 +256,6 @@
   </div>
 
   <script>
-    // CSV Upload
-    const uploadForm = document.getElementById('uploadForm');
-    const uploadMessage = document.getElementById('uploadMessage');
-
-    uploadForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      const fileInput = document.getElementById('csvFile');
-      const file = fileInput.files[0];
-      
-      if (!file) {
-        showMessage(uploadMessage, 'error', 'Please select a file');
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('csvFile', file);
-
-      try {
-        const response = await fetch('/admin/upload', {
-          method: 'POST',
-          body: formData
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          showMessage(uploadMessage, 'success', 
-            `Successfully processed ${data.processed || 0} records. ` +
-            `Created: ${data.created || 0}, Updated: ${data.updated || 0}`
-          );
-          fileInput.value = '';
-        } else {
-          showMessage(uploadMessage, 'error', data.error || 'Upload failed');
-        }
-      } catch (error) {
-        showMessage(uploadMessage, 'error', 'Connection error. Please try again.');
-      }
-    });
-
     // Search
     const searchForm = document.getElementById('searchForm');
     const searchMessage = document.getElementById('searchMessage');
@@ -339,10 +266,12 @@
       
       const ucasCode = document.getElementById('searchCode').value.trim();
       const group = document.getElementById('searchGroup').value;
+      const email = document.getElementById('searchEmail').value.trim();
 
       const params = new URLSearchParams();
       if (ucasCode) params.append('ucas_code', ucasCode);
       if (group) params.append('group', group);
+      if (email) params.append('email', email);
 
       try {
         const response = await fetch(`/admin/search?${params.toString()}`);
@@ -411,49 +340,6 @@
       element.className = `message ${type} show`;
       element.textContent = text;
     }
-
-    // Course pack upload
-    const packForm = document.getElementById('packForm');
-    const packMessage = document.getElementById('packMessage');
-
-    packForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const group = document.getElementById('packGroup').value;
-      const fileInput = document.getElementById('packFile');
-      const file = fileInput.files[0];
-
-      if (!file) {
-        showMessage(packMessage, 'error', 'Please choose a PDF file.');
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('group', group);
-      formData.append('pdfFile', file);
-
-      try {
-        const response = await fetch('/admin/upload-pack', {
-          method: 'POST',
-          body: formData
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          showMessage(
-            packMessage,
-            'success',
-            `Uploaded ${group} pack. Portal link: ${data.pdf_url || 'not available yet'}`
-          );
-          fileInput.value = '';
-        } else {
-          showMessage(packMessage, 'error', data.error || 'Upload failed');
-        }
-      } catch (error) {
-        showMessage(packMessage, 'error', 'Connection error. Please try again.');
-      }
-    });
 
     // Attach event listener for export button
     document.getElementById('exportBtn').addEventListener('click', exportCSV);

@@ -4,15 +4,13 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const basicAuth = require('express-basic-auth');
-const multer = require('multer');
-const { parse } = require('csv-parse/sync');
 const { stringify } = require('csv-stringify/sync');
 const path = require('path');
 
 const { db, statements } = require('./db/init');
 const { sendGroupEmail } = require('./email');
 const { syncStudentRow, syncAllStudents } = require('./sheets');
-const { getPackLinks, savePack, PACKS_DIR } = require('./pack-manager');
+const { getPackLinks, PACKS_DIR } = require('./pack-manager');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -87,31 +85,6 @@ function webhookAuth(req, res, next) {
   next();
 }
 
-// Multer for file uploads
-const csvUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only CSV files are allowed'));
-    }
-  }
-});
-
-const packUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only PDF files are allowed'));
-    }
-  }
-});
-
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
@@ -150,98 +123,6 @@ function randomiseGroup() {
  * @returns {string}
  */
 function now() {
-  return new Date().toISOString();
-}
-
-// =========================================================================
-// GOOGLE SHEETS HELPERS
-// =========================================================================
-
-function syncStudentSheetByCode(ucasCode) {
-  if (!ucasCode) {
-    return;
-  }
-
-  try {
-    const student = statements.findByCode.get(ucasCode);
-    if (!student) {
-      return;
-    }
-
-    syncStudentRow(student).catch((error) => {
-      console.error(`[Sheets] Unable to sync ${ucasCode}:`, error.message);
-    });
-  } catch (error) {
-    console.error(`[Sheets] Student lookup failed for ${ucasCode}:`, error.message);
-  }
-}
-
-function syncEntireSheetAsync() {
-  try {
-    const students = statements.getAll.all();
-    syncAllStudents(students).catch((error) => {
-      console.error('[Sheets] Full sync helper failed:', error.message);
-    });
-  } catch (error) {
-    console.error('[Sheets] Unable to read students for full sync:', error.message);
-  }
-}
-
-function buildPackLinks(group, req) {
-  const links = getPackLinks(group);
-  if (!links) {
-    return { client: null, email: null };
-  }
-
-  const hasAbsoluteEmail = Boolean(links.email && /^https?:\/\//i.test(links.email));
-  if (hasAbsoluteEmail || !links.client || !req) {
-    return links;
-  }
-
-  const origin = `${req.protocol}://${req.get('host')}`;
-  return {
-    client: links.client,
-    email: `${origin}${links.client}`,
-  };
-}
-
-// ============================================================================
-// STUDENT ROUTES
-// ============================================================================
-
-/**
- * POST /randomise - Student randomisation endpoint
- */
-app.post('/randomise', publicRateLimit, async (req, res) => {
-  try {
-    const { ucas_code, email } = req.body;
-
-    // Validate UCAS code
-    const validation = validateUcasCode(ucas_code);
-    if (!validation.valid) {
-      return res.status(400).json({ error: validation.error });
-    }
-
-    // Validate and sanitize email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Valid email address is required' });
-    }
-    const sanitizedEmail = email.trim().toLowerCase();
-
-    const code = validation.code;
-
-    // Check if student already exists
-    const existing = statements.findByCode.get(code);
-
-    if (existing && existing.group_name) {
-      const packLinks = buildPackLinks(existing.group_name, req);
-      syncStudentSheetByCode(code);
-      // Already assigned - return existing assignment
-      return res.json({
-        already_assigned: true,
-        group_name: existing.group_name,
-        group_label: GROUP_LABELS[existing.group_name],
         pdf_url: packLinks.client,
       });
     }
@@ -377,71 +258,42 @@ app.post('/admin/upload', adminAuth, csvUpload.single('csvFile'), async (req, re
   }
 });
 
-app.post('/admin/upload-pack', adminAuth, packUpload.single('pdfFile'), async (req, res) => {
-  try {
-    const { group } = req.body;
-
-    if (!group || !['VIDEO', 'AI'].includes(group)) {
-      return res.status(400).json({ error: 'Group must be VIDEO or AI' });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'No PDF uploaded' });
-    }
-
-    savePack(group, req.file.buffer);
-    const links = buildPackLinks(group, req);
-
-    return res.json({
-      ok: true,
-      group,
-      pdf_url: links.client,
-      email_url: links.email,
-      message: 'Course pack uploaded successfully',
-    });
-  } catch (error) {
-    console.error('Error in /admin/upload-pack:', error);
-    return res.status(500).json({ error: 'Pack upload failed' });
-  }
-});
-
 /**
  * GET /admin/search - Search students
  */
 app.get('/admin/search', adminAuth, (req, res) => {
   try {
-    const { ucas_code, group } = req.query;
+    const { ucas_code, group, email } = req.query;
 
-    let results;
+    const filters = [];
+    const params = [];
 
-    if (ucas_code && group) {
-      // Search by both code and group
-      const codePattern = `%${ucas_code}%`;
-      const groupValue = group === 'null' ? null : group;
-      
-      if (groupValue === null) {
-        // Handle null group separately
-        results = db.prepare(
-          'SELECT * FROM students WHERE ucas_code LIKE ? AND group_name IS NULL'
-        ).all(codePattern);
-      } else {
-        results = statements.searchByCodeAndGroup.all(codePattern, groupValue);
-      }
-    } else if (ucas_code) {
-      // Search by code only
-      const codePattern = `%${ucas_code}%`;
-      results = statements.searchByCode.all(codePattern);
-    } else if (group) {
-      // Search by group only
-      if (group === 'null') {
-        results = db.prepare('SELECT * FROM students WHERE group_name IS NULL').all();
-      } else {
-        results = statements.searchByGroup.all(group);
-      }
-    } else {
-      // No filters - return all
-      results = statements.getAll.all();
+    if (ucas_code) {
+      filters.push('ucas_code LIKE ?');
+      params.push(`%${ucas_code}%`);
     }
+
+    if (email) {
+      filters.push('email LIKE ?');
+      params.push(`%${email}%`);
+    }
+
+    if (group) {
+      if (group === 'null') {
+        filters.push('group_name IS NULL');
+      } else {
+        filters.push('group_name = ?');
+        params.push(group);
+      }
+    }
+
+    let query = 'SELECT * FROM students';
+    if (filters.length > 0) {
+      query += ` WHERE ${filters.join(' AND ')}`;
+    }
+    query += ' ORDER BY created_at DESC';
+
+    const results = db.prepare(query).all(...params);
 
     return res.json({ results });
 
@@ -609,12 +461,6 @@ app.use((req, res) => {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
-  
-  // Multer file upload errors
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({ error: err.message });
-  }
-  
   res.status(500).json({ error: 'Internal server error' });
 });
 
