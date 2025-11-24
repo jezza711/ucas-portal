@@ -11,19 +11,20 @@ const path = require('path');
 
 const { db, statements } = require('./db/init');
 const { sendGroupEmail } = require('./email');
+const { syncStudentRow, syncAllStudents } = require('./sheets');
+const { getPackLinks, savePack, PACKS_DIR } = require('./pack-manager');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Render and other reverse proxies inject X-Forwarded-* headers, so trust them
+// to keep rate limiting and logging accurate.
+app.set('trust proxy', 1);
 
 // Constants
 const GROUP_LABELS = {
   VIDEO: 'Video Course',
   AI: 'AI Group',
-};
-
-const PDF_URLS = {
-  VIDEO: process.env.VIDEO_PDF_URL,
-  AI: process.env.AI_PDF_URL,
 };
 
 // ============================================================================
@@ -52,6 +53,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Static files
 app.use(express.static('public'));
+app.use('/packs', express.static(PACKS_DIR));
 
 // Rate limiting for public routes
 const publicRateLimit = rateLimit({
@@ -86,7 +88,7 @@ function webhookAuth(req, res, next) {
 }
 
 // Multer for file uploads
-const upload = multer({
+const csvUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
@@ -94,6 +96,18 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('Only CSV files are allowed'));
+    }
+  }
+});
+
+const packUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
     }
   }
 });
@@ -139,6 +153,58 @@ function now() {
   return new Date().toISOString();
 }
 
+// =========================================================================
+// GOOGLE SHEETS HELPERS
+// =========================================================================
+
+function syncStudentSheetByCode(ucasCode) {
+  if (!ucasCode) {
+    return;
+  }
+
+  try {
+    const student = statements.findByCode.get(ucasCode);
+    if (!student) {
+      return;
+    }
+
+    syncStudentRow(student).catch((error) => {
+      console.error(`[Sheets] Unable to sync ${ucasCode}:`, error.message);
+    });
+  } catch (error) {
+    console.error(`[Sheets] Student lookup failed for ${ucasCode}:`, error.message);
+  }
+}
+
+function syncEntireSheetAsync() {
+  try {
+    const students = statements.getAll.all();
+    syncAllStudents(students).catch((error) => {
+      console.error('[Sheets] Full sync helper failed:', error.message);
+    });
+  } catch (error) {
+    console.error('[Sheets] Unable to read students for full sync:', error.message);
+  }
+}
+
+function buildPackLinks(group, req) {
+  const links = getPackLinks(group);
+  if (!links) {
+    return { client: null, email: null };
+  }
+
+  const hasAbsoluteEmail = Boolean(links.email && /^https?:\/\//i.test(links.email));
+  if (hasAbsoluteEmail || !links.client || !req) {
+    return links;
+  }
+
+  const origin = `${req.protocol}://${req.get('host')}`;
+  return {
+    client: links.client,
+    email: `${origin}${links.client}`,
+  };
+}
+
 // ============================================================================
 // STUDENT ROUTES
 // ============================================================================
@@ -169,12 +235,14 @@ app.post('/randomise', publicRateLimit, async (req, res) => {
     const existing = statements.findByCode.get(code);
 
     if (existing && existing.group_name) {
+      const packLinks = buildPackLinks(existing.group_name, req);
+      syncStudentSheetByCode(code);
       // Already assigned - return existing assignment
       return res.json({
         already_assigned: true,
         group_name: existing.group_name,
         group_label: GROUP_LABELS[existing.group_name],
-        pdf_url: PDF_URLS[existing.group_name],
+        pdf_url: packLinks.client,
       });
     }
 
@@ -191,12 +259,15 @@ app.post('/randomise', publicRateLimit, async (req, res) => {
       statements.insert.run(code, assignedGroup, sanitizedEmail, timestamp, timestamp);
     }
 
+    const packLinks = buildPackLinks(assignedGroup, req);
+
     // Send email with the assigned group pack
     let emailSent = false;
     const emailResult = await sendGroupEmail({
       to: sanitizedEmail,
       ucas_code: code,
       group_name: assignedGroup,
+      pdf_url: packLinks.email,
     });
 
     if (emailResult.ok && !emailResult.skipped) {
@@ -204,11 +275,13 @@ app.post('/randomise', publicRateLimit, async (req, res) => {
       statements.updateEmailSent.run(timestamp, timestamp, code);
     }
 
+    syncStudentSheetByCode(code);
+
     return res.json({
       already_assigned: false,
       group_name: assignedGroup,
       group_label: GROUP_LABELS[assignedGroup],
-      pdf_url: PDF_URLS[assignedGroup],
+      pdf_url: packLinks.client,
       email_sent: emailSent,
     });
 
@@ -232,7 +305,7 @@ app.get('/admin', adminAuth, (req, res) => {
 /**
  * POST /admin/upload - CSV upload and upsert
  */
-app.post('/admin/upload', adminAuth, upload.single('csvFile'), async (req, res) => {
+app.post('/admin/upload', adminAuth, csvUpload.single('csvFile'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -288,6 +361,8 @@ app.post('/admin/upload', adminAuth, upload.single('csvFile'), async (req, res) 
       }
     }
 
+    syncEntireSheetAsync();
+
     return res.json({
       ok: true,
       processed: records.length,
@@ -299,6 +374,34 @@ app.post('/admin/upload', adminAuth, upload.single('csvFile'), async (req, res) 
   } catch (error) {
     console.error('Error in /admin/upload:', error);
     return res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+app.post('/admin/upload-pack', adminAuth, packUpload.single('pdfFile'), async (req, res) => {
+  try {
+    const { group } = req.body;
+
+    if (!group || !['VIDEO', 'AI'].includes(group)) {
+      return res.status(400).json({ error: 'Group must be VIDEO or AI' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No PDF uploaded' });
+    }
+
+    savePack(group, req.file.buffer);
+    const links = buildPackLinks(group, req);
+
+    return res.json({
+      ok: true,
+      group,
+      pdf_url: links.client,
+      email_url: links.email,
+      message: 'Course pack uploaded successfully',
+    });
+  } catch (error) {
+    console.error('Error in /admin/upload-pack:', error);
+    return res.status(500).json({ error: 'Pack upload failed' });
   }
 });
 
@@ -396,6 +499,7 @@ app.post('/api/jisc-webhook', webhookRateLimit, webhookAuth, async (req, res) =>
 
     // Upsert the record
     statements.upsertEmail.run(code, email || null, timestamp, timestamp);
+    syncStudentSheetByCode(code);
 
     return res.json({ 
       ok: true, 
@@ -446,11 +550,14 @@ app.post('/api/hooks/send-pack', webhookRateLimit, webhookAuth, async (req, res)
       return res.status(400).json({ error: 'No email address available for this student' });
     }
 
+    const packLinks = buildPackLinks(student.group_name, req);
+
     // Send email
     const emailResult = await sendGroupEmail({
       to: targetEmail,
       ucas_code: code,
       group_name: student.group_name,
+      pdf_url: packLinks.email,
     });
 
     if (!emailResult.ok) {
@@ -464,6 +571,7 @@ app.post('/api/hooks/send-pack', webhookRateLimit, webhookAuth, async (req, res)
     if (!emailResult.skipped) {
       const timestamp = now();
       statements.updateEmailSent.run(timestamp, timestamp, code);
+      syncStudentSheetByCode(code);
     }
 
     return res.json({ 
@@ -524,6 +632,8 @@ const server = app.listen(PORT, () => {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
 });
+
+syncEntireSheetAsync();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

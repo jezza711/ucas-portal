@@ -9,6 +9,8 @@ A simple web application that randomises students into VIDEO or AI groups based 
 - **Webhooks**: JISC integration and email trigger endpoints
 - **Email**: Automatic pack delivery via Resend
 - **Database**: SQLite with persistent storage
+- **Reporting**: Optional Google Sheets sync for every student record
+- **Course Packs**: Upload fresh PDF packs in the admin dashboard without redeploying
 
 ## Tech Stack
 
@@ -107,6 +109,37 @@ x-webhook-secret: your-webhook-secret
 
 Sends the assigned group's PDF pack to the student.
 
+## Course Pack PDFs
+
+Admins can replace the downloadable packs any time without touching the codebase:
+
+1. Download the new PDF from the email your boss sends you.
+2. Sign in to `/admin` and use the **"Upload Course Pack PDF"** form.
+3. Choose the relevant group (Video or AI) and upload the PDF.
+4. The file is stored under `/packs/{video|ai}-pack.pdf`, immediately used by the student portal and outgoing emails.
+
+> Tip: Set the `PUBLIC_BASE_URL` env var (e.g. `https://your-service.onrender.com`) so emails get an absolute link. The portal itself works with the relative `/packs/...` path.
+
+## Google Sheets Sync
+
+The server can mirror every student record to a Google Sheet for quick reporting.
+
+1. Create a Google Cloud project and service account with the *Google Sheets API* enabled.
+2. Download the JSON key and add these values to your environment:
+  - `GOOGLE_SHEET_ID` – the ID portion of your sheet URL.
+  - `GOOGLE_CLIENT_EMAIL` – the service account email address.
+  - `GOOGLE_PRIVATE_KEY` – the private key, with every newline replaced by `\n`.
+  - `GOOGLE_SHEET_TAB` (optional) – defaults to `Students` if omitted.
+3. Share the Google Sheet with the service account email so it can edit the sheet.
+
+### What gets synced?
+
+- Columns: `UCAS Code`, `Group Name`, `Email`, `Created At`, `Updated At`, `Email Last Sent At`.
+- Every `/randomise`, webhook, or manual email send updates a single row (upserted on UCAS code).
+- CSV uploads and server start trigger a full sheet refresh so the Google Sheet always matches the SQLite database.
+
+> **Heads-up:** A bulk refresh overwrites the entire tab, so use a dedicated sheet/tab for this integration.
+
 ## Testing
 
 See `TESTING.md` for curl command examples to test all endpoints.
@@ -122,10 +155,14 @@ See `TESTING.md` for curl command examples to test all endpoints.
    - **Start Command**: `node server.js`
    - **Add Persistent Disk**: Mount at `/opt/render/project/src/db` (Render) or `/app/db` (Railway)
 4. Set environment variables in the dashboard (copy from `.env.example`)
+  - For `GOOGLE_PRIVATE_KEY`, paste the key exactly as shown in the JSON file but replace real newlines with `\n`.
+  - Set `PUBLIC_BASE_URL` to your live Render URL so email links point to the right host.
 5. Update `VIDEO_PDF_URL` and `AI_PDF_URL` to your actual hosted PDF links
 6. Deploy!
 
 **Important**: The database file is stored in the `db/` directory. Ensure this directory is backed by a persistent volume, otherwise data will be lost on restarts.
+
+Uploads created through the admin dashboard live under the `uploads/packs` directory. Mount your Render disk to a parent path (e.g. `/opt/render/project/src/uploads`) if you want course packs to persist across deploys.
 
 ### Alternative: Vercel
 
@@ -158,7 +195,11 @@ SQLite database stored at `db/app.db` with a single `students` table:
 
 ## Environment Variables
 
-See `.env.example` for all configuration options.
+See `.env.example` for all configuration options. Key additions:
+
+- `PUBLIC_BASE_URL` – Base URL (with protocol) used to build absolute `/packs/...` links in outgoing emails.
+- `GOOGLE_*` – Service account credentials for the optional sheet sync.
+- `PACKS_DIR` (optional) – Custom absolute path for storing uploaded PDFs; defaults to `<project>/uploads/packs`.
 
 ## License
 

@@ -20,9 +20,10 @@ const GROUP_SUBJECTS = {
  * @param {string} params.to - Recipient email address
  * @param {string} params.ucas_code - Student's UCAS code
  * @param {string} params.group_name - Group assignment (VIDEO or AI)
+ * @param {string} [params.pdf_url] - Optional fully qualified PDF link override
  * @returns {Promise<Object>} { ok: boolean, skipped?: boolean, id?: string, error?: string }
  */
-async function sendGroupEmail({ to, ucas_code, group_name }) {
+async function sendGroupEmail({ to, ucas_code, group_name, pdf_url }) {
   // Validate group
   if (!['VIDEO', 'AI'].includes(group_name)) {
     return { ok: false, error: 'Invalid group name' };
@@ -39,9 +40,12 @@ async function sendGroupEmail({ to, ucas_code, group_name }) {
     return { ok: false, error: 'Invalid email address' };
   }
 
-  const pdfUrl = group_name === 'VIDEO' 
-    ? process.env.VIDEO_PDF_URL 
-    : process.env.AI_PDF_URL;
+  const pdfUrl = pdf_url
+    || (group_name === 'VIDEO' ? process.env.VIDEO_PDF_URL : process.env.AI_PDF_URL);
+
+  if (!pdfUrl) {
+    return { ok: false, error: 'No PDF URL configured for this group' };
+  }
 
   const subject = GROUP_SUBJECTS[group_name];
   const groupLabel = GROUP_LABELS[group_name];
