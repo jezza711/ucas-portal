@@ -123,6 +123,98 @@ function randomiseGroup() {
  * @returns {string}
  */
 function now() {
+  return new Date().toISOString();
+}
+
+// =========================================================================
+// GOOGLE SHEETS HELPERS
+// =========================================================================
+
+function syncStudentSheetByCode(ucasCode) {
+  if (!ucasCode) {
+    return;
+  }
+
+  try {
+    const student = statements.findByCode.get(ucasCode);
+    if (!student) {
+      return;
+    }
+
+    syncStudentRow(student).catch((error) => {
+      console.error(`[Sheets] Unable to sync ${ucasCode}:`, error.message);
+    });
+  } catch (error) {
+    console.error(`[Sheets] Student lookup failed for ${ucasCode}:`, error.message);
+  }
+}
+
+function syncEntireSheetAsync() {
+  try {
+    const students = statements.getAll.all();
+    syncAllStudents(students).catch((error) => {
+      console.error('[Sheets] Full sync helper failed:', error.message);
+    });
+  } catch (error) {
+    console.error('[Sheets] Unable to read students for full sync:', error.message);
+  }
+}
+
+function buildPackLinks(group, req) {
+  const links = getPackLinks(group);
+  if (!links) {
+    return { client: null, email: null };
+  }
+
+  const hasAbsoluteEmail = Boolean(links.email && /^https?:\/\//i.test(links.email));
+  if (hasAbsoluteEmail || !links.client || !req) {
+    return links;
+  }
+
+  const origin = `${req.protocol}://${req.get('host')}`;
+  return {
+    client: links.client,
+    email: `${origin}${links.client}`,
+  };
+}
+
+// ============================================================================
+// STUDENT ROUTES
+// ============================================================================
+
+/**
+ * POST /randomise - Student randomisation endpoint
+ */
+app.post('/randomise', publicRateLimit, async (req, res) => {
+  try {
+    const { ucas_code, email } = req.body;
+
+    // Validate UCAS code
+    const validation = validateUcasCode(ucas_code);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    // Validate and sanitize email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Valid email address is required' });
+    }
+    const sanitizedEmail = email.trim().toLowerCase();
+
+    const code = validation.code;
+
+    // Check if student already exists
+    const existing = statements.findByCode.get(code);
+
+    if (existing && existing.group_name) {
+      const packLinks = buildPackLinks(existing.group_name, req);
+      syncStudentSheetByCode(code);
+      // Already assigned - return existing assignment
+      return res.json({
+        already_assigned: true,
+        group_name: existing.group_name,
+        group_label: GROUP_LABELS[existing.group_name],
         pdf_url: packLinks.client,
       });
     }
@@ -181,81 +273,6 @@ function now() {
  */
 app.get('/admin', adminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-/**
- * POST /admin/upload - CSV upload and upsert
- */
-app.post('/admin/upload', adminAuth, csvUpload.single('csvFile'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const csvContent = req.file.buffer.toString('utf-8');
-    
-    // Parse CSV
-    let records;
-    try {
-      records = parse(csvContent, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-      });
-    } catch (parseError) {
-      return res.status(400).json({ error: 'Invalid CSV format' });
-    }
-
-    let created = 0;
-    let updated = 0;
-    let errors = [];
-
-    for (const record of records) {
-      const { ucas_code, email } = record;
-
-      // Validate UCAS code
-      const validation = validateUcasCode(ucas_code);
-      if (!validation.valid) {
-        errors.push(`Invalid UCAS code: ${ucas_code}`);
-        continue;
-      }
-
-      const code = validation.code;
-      const timestamp = now();
-
-      try {
-        const existing = statements.findByCode.get(code);
-        
-        if (existing) {
-          // Update email if provided
-          if (email) {
-            statements.upsertEmail.run(code, email, timestamp, timestamp);
-            updated++;
-          }
-        } else {
-          // Create new record without group assignment
-          statements.insert.run(code, null, email || null, timestamp, timestamp);
-          created++;
-        }
-      } catch (dbError) {
-        errors.push(`Database error for ${code}: ${dbError.message}`);
-      }
-    }
-
-    syncEntireSheetAsync();
-
-    return res.json({
-      ok: true,
-      processed: records.length,
-      created,
-      updated,
-      errors: errors.length > 0 ? errors : undefined,
-    });
-
-  } catch (error) {
-    console.error('Error in /admin/upload:', error);
-    return res.status(500).json({ error: 'Upload failed' });
-  }
 });
 
 /**
