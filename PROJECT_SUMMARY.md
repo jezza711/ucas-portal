@@ -16,7 +16,7 @@ ucas-portal/
 ├── public/
 │   ├── index.html          # Student portal frontend
 │   └── admin.html          # Admin dashboard frontend
-├── email.js                # Email service with Resend integration
+├── email.js                # Email service with SendGrid integration
 ├── server.js               # Main Express server with all routes
 ├── package.json            # Dependencies and scripts
 ├── .env.example            # Environment variables template
@@ -39,7 +39,7 @@ npm install
 Edit `.env` file with your settings:
 - Set `ADMIN_USER` and `ADMIN_PASS` for admin access
 - Set `WEBHOOK_SECRET` for webhook security
-- Set `RESEND_API_KEY` for email delivery (optional for testing)
+- Set `SENDGRID_API_KEY` (or legacy `RESEND_API_KEY`) for email delivery (optional for testing)
 - Update PDF URLs when you have them hosted
 
 ### 3. Start Server
@@ -82,7 +82,7 @@ Server runs on: http://localhost:3000
   - Updates email_last_sent_at timestamp
 
 ### ✅ Email Service
-- Resend integration for email delivery
+- SendGrid integration for email delivery
 - Graceful fallback when API key not configured
 - HTML and text email formats
 - Group-specific subjects and content
@@ -169,7 +169,8 @@ ADMIN_USER=your-admin-username
 ADMIN_PASS=strong-password-here
 WEBHOOK_SECRET=long-random-secret-string
 
-RESEND_API_KEY=re_your_actual_key
+SENDGRID_API_KEY=sg_your_actual_key
+# RESEND_API_KEY= (legacy fallback if you cannot rename yet)
 EMAIL_FROM=noreply@yourdomain.com
 
 VIDEO_PDF_URL=https://yourdomain.com/pdfs/video-course-pack.pdf
@@ -219,8 +220,8 @@ Invoke-WebRequest -Uri "http://localhost:3000/api/hooks/send-pack" `
 - Check disk permissions on `db/` directory
 
 ### Email not sending
-- Verify `RESEND_API_KEY` is set correctly
-- Check Resend dashboard for API status
+- Verify `SENDGRID_API_KEY` (or fallback `RESEND_API_KEY`) is set correctly
+- Check SendGrid dashboard for API status
 - Emails are skipped (not failed) if API key is missing
 
 ### Rate limit hit
@@ -267,6 +268,6 @@ For questions about the implementation, refer to:
 
 **Project Status**: ✅ Complete and Ready for Use
 
-**Built with**: Node.js, Express, SQLite, Resend, Helmet, Rate Limiting
+**Built with**: Node.js, Express, SQLite, SendGrid, Helmet, Rate Limiting
 
 **License**: MIT

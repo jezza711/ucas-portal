@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
     "better-sqlite3": "^12.4.1",
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",
@@ -21,7 +22,6 @@
     "express-rate-limit": "^8.1.0",
     "googleapis": "^166.0.0",
     "helmet": "^8.1.0",
-    "morgan": "^1.10.1",
-    "resend": "^6.2.2"
+    "morgan": "^1.10.1"
   }
 }

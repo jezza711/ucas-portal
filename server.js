@@ -448,7 +448,7 @@ app.post('/api/hooks/send-pack', webhookRateLimit, webhookAuth, async (req, res)
       email_sent: !emailResult.skipped,
       skipped: emailResult.skipped || false,
       message: emailResult.skipped 
-        ? 'Email skipped (no RESEND_API_KEY configured)' 
+        ? 'Email skipped (no SENDGRID_API_KEY configured)' 
         : 'Email sent successfully'
     });
 

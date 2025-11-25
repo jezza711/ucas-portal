@@ -1,8 +1,12 @@
 require('dotenv').config();
-const { Resend } = require('resend');
+const sgMail = require('@sendgrid/mail');
 
-// Initialize Resend client if API key is present
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+// Support legacy RESEND_API_KEY env so users do not need to rename immediately.
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || process.env.RESEND_API_KEY;
+if (SENDGRID_API_KEY) {
+  sgMail.setApiKey(SENDGRID_API_KEY);
+}
+const emailClientReady = Boolean(SENDGRID_API_KEY);
 
 const GROUP_LABELS = {
   VIDEO: 'Video Course',
@@ -29,9 +33,9 @@ async function sendGroupEmail({ to, ucas_code, group_name, pdf_url }) {
     return { ok: false, error: 'Invalid group name' };
   }
 
-  // If no Resend API key, skip sending
-  if (!resend) {
-    console.log(`⚠️  Email skipped (no RESEND_API_KEY): ${to} - ${group_name}`);
+  // If no SendGrid API key, skip sending so flow can continue locally
+  if (!emailClientReady) {
+    console.log(`⚠️  Email skipped (no SENDGRID_API_KEY/RESEND_API_KEY): ${to} - ${group_name}`);
     return { ok: true, skipped: true };
   }
 
@@ -150,19 +154,21 @@ Course Administration Team
   `.trim();
 
   try {
-    const result = await resend.emails.send({
+    const [response] = await sgMail.send({
+      to,
       from: process.env.EMAIL_FROM,
-      to: to,
-      subject: subject,
+      subject,
       html: htmlBody,
       text: textBody,
     });
 
-    console.log(`✓ Email sent to ${to} - ${group_name} (ID: ${result.data?.id})`);
-    return { ok: true, id: result.data?.id };
+    const messageId = response?.headers ? response.headers['x-message-id'] || response.headers['x-sendgrid-message-id'] : undefined;
+    console.log(`✓ Email sent to ${to} - ${group_name} (SendGrid id: ${messageId || 'n/a'})`);
+    return { ok: true, id: messageId };
   } catch (error) {
-    console.error(`✗ Email send failed to ${to}:`, error.message);
-    return { ok: false, error: error.message };
+    const errMsg = error?.response?.body?.errors?.[0]?.message || error.message;
+    console.error(`✗ Email send failed to ${to}:`, errMsg);
+    return { ok: false, error: errMsg };
   }
 }
 

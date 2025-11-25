@@ -193,7 +193,7 @@ First, ensure student 0123456789 has an email and assignment from previous tests
 curl -s -X POST -H "Content-Type: application/json" -H "x-webhook-secret: replace-with-a-long-secret" -d "{\"ucas_code\":\"0123456789\"}" http://localhost:3000/api/hooks/send-pack
 ```
 
-**Expected:** `{"ok":true, "email_sent": true}` (or `skipped: true` if no RESEND_API_KEY set)
+**Expected:** `{"ok":true, "email_sent": true}` (or `skipped: true` if no SENDGRID_API_KEY/RESEND_API_KEY set)
 
 ### Test 19: Send Pack Email with Override Email
 
@@ -285,7 +285,7 @@ curl -s -u admin:change-this "http://localhost:3000/admin/search?ucas_code=55555
 
 ## Notes
 
-- **Email Testing**: If `RESEND_API_KEY` is not set, emails will be skipped (check server logs for confirmation)
+- **Email Testing**: If `SENDGRID_API_KEY` (or fallback `RESEND_API_KEY`) is not set, emails will be skipped (check server logs for confirmation)
 - **UCAS Code Format**: Must be exactly 10 digits, spaces are automatically removed
 - **Groups**: Only two valid groups: `VIDEO` and `AI`
 - **Rate Limits**: 100 requests per 15 minutes for public routes, 1000 for webhooks

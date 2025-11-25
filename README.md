@@ -7,7 +7,7 @@ A simple web application that randomises students into VIDEO or AI groups based 
 - **Student Portal**: Enter UCAS code, get assigned to a group, receive PDF link
 - **Admin Dashboard**: Search records, export data
 - **Webhooks**: JISC integration and email trigger endpoints
-- **Email**: Automatic pack delivery via Resend
+- **Email**: Automatic pack delivery via SendGrid
 - **Database**: SQLite with persistent storage
 - **Reporting**: Optional Google Sheets sync for every student record
 - **Course Packs**: Serve downloadable PDFs without redeploying
@@ -16,7 +16,7 @@ A simple web application that randomises students into VIDEO or AI groups based 
 
 - Node.js 18+ with Express
 - SQLite (better-sqlite3)
-- Resend for email delivery
+- SendGrid for email delivery
 - Helmet, rate limiting, and Basic Auth for security
 
 ## Quick Start
@@ -38,7 +38,7 @@ cp .env.example .env
 **Required settings:**
 - `ADMIN_USER` and `ADMIN_PASS` - for admin access
 - `WEBHOOK_SECRET` - for securing webhook endpoints
-- `RESEND_API_KEY` - for email delivery (optional during development)
+- `SENDGRID_API_KEY` (or legacy `RESEND_API_KEY`) - for email delivery (optional during development)
 - `EMAIL_FROM` - sender email address
 - `VIDEO_PDF_URL` and `AI_PDF_URL` - links to course pack PDFs
 
