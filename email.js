@@ -24,10 +24,9 @@ const GROUP_SUBJECTS = {
  * @param {string} params.to - Recipient email address
  * @param {string} params.ucas_code - Student's UCAS code
  * @param {string} params.group_name - Group assignment (VIDEO or AI)
- * @param {string} [params.pdf_url] - Optional fully qualified PDF link override
  * @returns {Promise<Object>} { ok: boolean, skipped?: boolean, id?: string, error?: string }
  */
-async function sendGroupEmail({ to, ucas_code, group_name, pdf_url }) {
+async function sendGroupEmail({ to, ucas_code, group_name }) {
   // Validate group
   if (!['VIDEO', 'AI'].includes(group_name)) {
     return { ok: false, error: 'Invalid group name' };
@@ -44,19 +43,11 @@ async function sendGroupEmail({ to, ucas_code, group_name, pdf_url }) {
     return { ok: false, error: 'Invalid email address' };
   }
 
-  const pdfUrl = pdf_url
-    || (group_name === 'VIDEO' ? process.env.VIDEO_PDF_URL : process.env.AI_PDF_URL);
-
-  if (!pdfUrl) {
-    return { ok: false, error: 'No PDF URL configured for this group' };
-  }
-
   const groupLabel = GROUP_LABELS[group_name];
   const { htmlBody, textBody, subject } = buildEmailTemplates({
     group: group_name,
     groupLabel,
     ucas_code,
-    pdfUrl,
   });
 
   try {
@@ -82,7 +73,7 @@ module.exports = {
   sendGroupEmail,
 };
 
-function buildEmailTemplates({ group, groupLabel, ucas_code, pdfUrl }) {
+function buildEmailTemplates({ group, groupLabel, ucas_code }) {
   if (group === 'VIDEO') {
     const html = `
       <!DOCTYPE html>
@@ -145,8 +136,6 @@ function buildEmailTemplates({ group, groupLabel, ucas_code, pdfUrl }) {
             </ol>
           </div>
 
-          <p><a class="button" href="${pdfUrl}">📄 Download Video Course Pack</a></p>
-
           <p>Your resources:</p>
           <ul>
             <li>🚀 Induction video: <a href="https://youtu.be/mqdV7OEE7VY">https://youtu.be/mqdV7OEE7VY</a></li>
@@ -169,7 +158,6 @@ You now have free access to the Medical Interview Video Course until May 2026. A
 - Sign up: https://courses.theaspiringmedics.co.uk/p/medicine-interview-course
 - Enter coupon code: VIDEO
 
-Download the Video Course pack: ${pdfUrl}
 Induction video: https://youtu.be/mqdV7OEE7VY
 Video Course brochure: https://drive.google.com/file/d/15KiBt4QEY02f50QRaqYnnOFOBOqzBoEM/view?usp=sharing
 
@@ -248,8 +236,6 @@ Outreach@theaspiringmedics.co.uk`.trim();
             <li>Register your account: <a href="https://ai.theaspiringmedics.co.uk/register">https://ai.theaspiringmedics.co.uk/register</a></li>
           </ol>
 
-          <p><a class="button" href="${pdfUrl}">📄 Download AVA Welcome Pack</a></p>
-
           <p>Helpful resources:</p>
           <ul>
             <li>🚀 Induction video: <a href="https://youtu.be/k8gcNcML5Xk">https://youtu.be/k8gcNcML5Xk</a></li>
@@ -272,7 +258,6 @@ You now have free access to AVA, your AI interview coach, until May 2026. Please
 1) Sign up: https://buy.stripe.com/4gMcN55nBdgo04o63f6c009
 2) Register: https://ai.theaspiringmedics.co.uk/register
 
-Download the AVA welcome pack: ${pdfUrl}
 Induction video: https://youtu.be/k8gcNcML5Xk
 AVA brochure: https://drive.google.com/file/d/1IfTXBnx1h0QkWxauIreFGKC-VlnnUy_a/view?usp=sharing
 

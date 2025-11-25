@@ -27,16 +27,6 @@ function normalizeBaseUrl() {
   return base.endsWith('/') ? base.slice(0, -1) : base;
 }
 
-function getEnvOverride(group) {
-  if (group === 'VIDEO') {
-    return process.env.VIDEO_PDF_URL || null;
-  }
-  if (group === 'AI') {
-    return process.env.AI_PDF_URL || null;
-  }
-  return null;
-}
-
 function getLocalFilePath(group) {
   const filename = PACK_FILENAMES[group];
   if (!filename) {
@@ -58,11 +48,6 @@ function getRelativePath(group) {
 }
 
 function getPackLinks(group) {
-  const override = getEnvOverride(group);
-  if (override) {
-    return { client: override, email: override };
-  }
-
   const relativePath = getRelativePath(group);
   if (!relativePath) {
     return { client: null, email: null };

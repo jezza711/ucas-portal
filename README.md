@@ -4,7 +4,7 @@ A simple web application that randomises students into VIDEO or AI groups based 
 
 ## Features
 
-- **Student Portal**: Enter UCAS code, get assigned to a group, receive PDF link
+- **Student Portal**: Enter UCAS code, get assigned to a group, receive tailored resources
 - **Admin Dashboard**: Search records, export data
 - **Forced Assignments**: Optional allow-list to guarantee certain UCAS codes receive AI
 - **Webhooks**: JISC integration and email trigger endpoints
@@ -41,7 +41,6 @@ cp .env.example .env
 - `WEBHOOK_SECRET` - for securing webhook endpoints
 - `SENDGRID_API_KEY` (or legacy `RESEND_API_KEY`) - for email delivery (optional during development)
 - `EMAIL_FROM` - sender email address
-- `VIDEO_PDF_URL` and `AI_PDF_URL` - links to course pack PDFs
 - `FORCED_AI_FILE` (optional) - absolute path to the newline-delimited UCAS list that must always join AI
 
 ### 3. Run the Application
@@ -122,13 +121,11 @@ Sends the assigned group's PDF pack to the student.
 
 ## Course Pack PDFs
 
-Configure the PDF links via environment variables or static files you ship with the app:
+PDF downloads are optional now that both email templates contain the key Google Drive resources.
 
-1. Host the Video and AI course packs (Render disk, S3, Google Drive direct link, etc.).
-2. Set `VIDEO_PDF_URL` and `AI_PDF_URL` to those fully qualified URLs.
-3. (Optional) If you ship the PDFs with the app, place them in the `/packs` directory and expose them via your CDN/Render disk.
-
-> Tip: Set the `PUBLIC_BASE_URL` env var (e.g. `https://your-service.onrender.com`) so emails get an absolute link even when the portal itself serves `/packs/...` paths.
+- If you still want the portal to surface downloadable packs, upload `video-pack.pdf` and/or `ai-pack.pdf` into `uploads/packs` (or point `PACKS_DIR` to a persistent directory) and expose that folder publicly.
+- Set `PUBLIC_BASE_URL` (e.g. `https://your-service.onrender.com`) so outgoing links can be made absolute when the files are served by the app itself.
+- When no PDFs are present, students simply follow the links inside their confirmation email.
 
 ## Google Sheets Sync
 
@@ -167,8 +164,7 @@ See `TESTING.md` for curl command examples to test all endpoints.
 4. Set environment variables in the dashboard (copy from `.env.example`)
   - For `GOOGLE_PRIVATE_KEY`, paste the key exactly as shown in the JSON file but replace real newlines with `\n`.
   - Set `PUBLIC_BASE_URL` to your live Render URL so email links point to the right host.
-5. Update `VIDEO_PDF_URL` and `AI_PDF_URL` to your actual hosted PDF links
-6. Deploy!
+5. Deploy!
 
 **Important**: The database file is stored in the `db/` directory. Ensure this directory is backed by a persistent volume, otherwise data will be lost on restarts.
 

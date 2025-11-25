@@ -175,8 +175,6 @@ SENDGRID_API_KEY=sg_your_actual_key
 # RESEND_API_KEY= (legacy fallback if you cannot rename yet)
 EMAIL_FROM=noreply@yourdomain.com
 
-VIDEO_PDF_URL=https://yourdomain.com/pdfs/video-course-pack.pdf
-AI_PDF_URL=https://yourdomain.com/pdfs/ai-group-pack.pdf
 FORCED_AI_FILE=/opt/render/project/src/config/forced-ai.txt
 ```
 

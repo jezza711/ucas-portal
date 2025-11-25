@@ -242,7 +242,6 @@ app.post('/randomise', publicRateLimit, async (req, res) => {
       to: sanitizedEmail,
       ucas_code: code,
       group_name: assignedGroup,
-      pdf_url: packLinks.email,
     });
 
     if (emailResult.ok && !emailResult.skipped) {
@@ -428,7 +427,6 @@ app.post('/api/hooks/send-pack', webhookRateLimit, webhookAuth, async (req, res)
       to: targetEmail,
       ucas_code: code,
       group_name: student.group_name,
-      pdf_url: packLinks.email,
     });
 
     if (!emailResult.ok) {
