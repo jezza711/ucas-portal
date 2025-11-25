@@ -15,7 +15,7 @@ const GROUP_LABELS = {
 
 const GROUP_SUBJECTS = {
   VIDEO: 'Your Video Course Pack',
-  AI: 'Your AI Group Pack',
+  AI: 'Welcome to AVA – Your AI Interview Coach',
 };
 
 /**
@@ -51,10 +51,240 @@ async function sendGroupEmail({ to, ucas_code, group_name, pdf_url }) {
     return { ok: false, error: 'No PDF URL configured for this group' };
   }
 
-  const subject = GROUP_SUBJECTS[group_name];
   const groupLabel = GROUP_LABELS[group_name];
+  const { htmlBody, textBody, subject } = buildEmailTemplates({
+    group: group_name,
+    groupLabel,
+    ucas_code,
+    pdfUrl,
+  });
 
-  const htmlBody = `
+  try {
+    const [response] = await sgMail.send({
+      to,
+      from: process.env.EMAIL_FROM,
+      subject,
+      html: htmlBody,
+      text: textBody,
+    });
+
+    const messageId = response?.headers ? response.headers['x-message-id'] || response.headers['x-sendgrid-message-id'] : undefined;
+    console.log(`✓ Email sent to ${to} - ${group_name} (SendGrid id: ${messageId || 'n/a'})`);
+    return { ok: true, id: messageId };
+  } catch (error) {
+    const errMsg = error?.response?.body?.errors?.[0]?.message || error.message;
+    console.error(`✗ Email send failed to ${to}:`, errMsg);
+    return { ok: false, error: errMsg };
+  }
+}
+
+module.exports = {
+  sendGroupEmail,
+};
+
+function buildEmailTemplates({ group, groupLabel, ucas_code, pdfUrl }) {
+  if (group === 'VIDEO') {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #1f2933;
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f7fb;
+          }
+          .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.1);
+          }
+          h1 {
+            color: #0f62fe;
+            margin-bottom: 10px;
+          }
+          .info-box {
+            background: #e8f1ff;
+            border-left: 4px solid #0f62fe;
+            padding: 14px;
+            border-radius: 6px;
+            margin: 20px 0;
+          }
+          .button {
+            display: inline-block;
+            padding: 12px 20px;
+            background: #0f62fe;
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            margin: 15px 0;
+          }
+          ul {
+            padding-left: 18px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>🎓 Welcome to the Video Course Group!</h1>
+          <p>UCAS Personal ID: <strong>${ucas_code}</strong></p>
+          <p>Congratulations! You have been allocated to the <strong>Video Course group</strong> for our national study on interview preparation. You now have free access to the Medical Interview Video Course until May 2026, featuring 50+ hours of structured lessons covering MMI, panel, and Oxbridge interviews.</p>
+
+          <div class="info-box">
+            <strong>Activate your access:</strong>
+            <ol>
+              <li>Sign up: <a href="https://courses.theaspiringmedics.co.uk/p/medicine-interview-course">https://courses.theaspiringmedics.co.uk/p/medicine-interview-course</a></li>
+              <li>Enter coupon code: <strong>VIDEO</strong></li>
+            </ol>
+          </div>
+
+          <p><a class="button" href="${pdfUrl}">📄 Download Video Course Pack</a></p>
+
+          <p>Your resources:</p>
+          <ul>
+            <li>🚀 Induction video: <a href="https://youtu.be/mqdV7OEE7VY">https://youtu.be/mqdV7OEE7VY</a></li>
+            <li>🌟 Video Course brochure: <a href="https://drive.google.com/file/d/15KiBt4QEY02f50QRaqYnnOFOBOqzBoEM/view?usp=sharing">View brochure</a></li>
+          </ul>
+
+          <p>This course is designed to help you master every interview format with guided walkthroughs, exemplar answers, and step-by-step drills.</p>
+
+          <p>Warm regards,<br>Aspiring Medics Research Team<br><a href="mailto:Outreach@theaspiringmedics.co.uk">Outreach@theaspiringmedics.co.uk</a></p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `Welcome to the Video Course Group!
+
+UCAS Personal ID: ${ucas_code}
+
+You now have free access to the Medical Interview Video Course until May 2026. Activate access:
+- Sign up: https://courses.theaspiringmedics.co.uk/p/medicine-interview-course
+- Enter coupon code: VIDEO
+
+Download the Video Course pack: ${pdfUrl}
+Induction video: https://youtu.be/mqdV7OEE7VY
+Video Course brochure: https://drive.google.com/file/d/15KiBt4QEY02f50QRaqYnnOFOBOqzBoEM/view?usp=sharing
+
+The course includes 50+ hours of structured lessons for MMI, panel, and Oxbridge interviews.
+
+Aspiring Medics Research Team
+Outreach@theaspiringmedics.co.uk`.trim();
+
+    return { htmlBody: html, textBody: text, subject: GROUP_SUBJECTS.VIDEO };
+  }
+
+  if (group === 'AI') {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f7f7fb;
+          }
+          .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 12px 25px rgba(102, 126, 234, 0.15);
+          }
+          h1 {
+            color: #4f46e5;
+            margin-bottom: 10px;
+          }
+          .steps {
+            margin: 20px 0;
+            padding-left: 18px;
+          }
+          .steps li {
+            margin-bottom: 10px;
+          }
+          a.button {
+            display: inline-block;
+            margin: 10px 0;
+            padding: 12px 20px;
+            background: #4f46e5;
+            color: #fff;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+          }
+          .info-box {
+            background: #eef2ff;
+            border-left: 4px solid #4f46e5;
+            padding: 14px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>🎉 Welcome to the AVA Group!</h1>
+          <p>UCAS Personal ID: <strong>${ucas_code}</strong></p>
+          <p>Congratulations! You’ve been allocated to the <strong>AVA group</strong> for our national study on medical interview preparation. You now receive <strong>free access to AVA</strong>, your AI interview coach, until May 2026.</p>
+
+          <div class="info-box">
+            <strong>Important:</strong> please complete the steps using the same email address you entered on the portal (all lowercase / uncapitalised).
+          </div>
+
+          <ol class="steps">
+            <li>Sign up here: <a href="https://buy.stripe.com/4gMcN55nBdgo04o63f6c009">https://buy.stripe.com/4gMcN55nBdgo04o63f6c009</a></li>
+            <li>Register your account: <a href="https://ai.theaspiringmedics.co.uk/register">https://ai.theaspiringmedics.co.uk/register</a></li>
+          </ol>
+
+          <p><a class="button" href="${pdfUrl}">📄 Download AVA Welcome Pack</a></p>
+
+          <p>Helpful resources:</p>
+          <ul>
+            <li>🚀 Induction video: <a href="https://youtu.be/k8gcNcML5Xk">https://youtu.be/k8gcNcML5Xk</a></li>
+            <li>🌟 AVA brochure: <a href="https://drive.google.com/file/d/1IfTXBnx1h0QkWxauIreFGKC-VlnnUy_a/view?usp=sharing">View brochure</a></li>
+          </ul>
+
+          <p>AVA lets you practise MMI and panel interviews with real-time feedback, available 24/7. We’re excited to have you on the programme!</p>
+
+          <p>Warm regards,<br>Aspiring Medics Research Team<br><a href="mailto:Outreach@theaspiringmedics.co.uk">Outreach@theaspiringmedics.co.uk</a></p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `Welcome to the AVA Group!
+
+UCAS Personal ID: ${ucas_code}
+
+You now have free access to AVA, your AI interview coach, until May 2026. Please complete these steps using the same (lowercase) email you entered on the portal:
+1) Sign up: https://buy.stripe.com/4gMcN55nBdgo04o63f6c009
+2) Register: https://ai.theaspiringmedics.co.uk/register
+
+Download the AVA welcome pack: ${pdfUrl}
+Induction video: https://youtu.be/k8gcNcML5Xk
+AVA brochure: https://drive.google.com/file/d/1IfTXBnx1h0QkWxauIreFGKC-VlnnUy_a/view?usp=sharing
+
+AVA lets you practise MMI and panel interviews with real-time feedback. Welcome aboard!
+
+Aspiring Medics Research Team
+Outreach@theaspiringmedics.co.uk`.trim();
+
+    return { htmlBody: html, textBody: text, subject: GROUP_SUBJECTS.AI };
+  }
+
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -135,8 +365,7 @@ async function sendGroupEmail({ to, ucas_code, group_name, pdf_url }) {
     </html>
   `;
 
-  const textBody = `
-Group Assignment Confirmed
+  const text = `Group Assignment Confirmed
 
 Hello,
 
@@ -150,28 +379,7 @@ Download your course pack: ${pdfUrl}
 If you have any questions, please contact your course administrator.
 
 Best regards,
-Course Administration Team
-  `.trim();
+Course Administration Team`.trim();
 
-  try {
-    const [response] = await sgMail.send({
-      to,
-      from: process.env.EMAIL_FROM,
-      subject,
-      html: htmlBody,
-      text: textBody,
-    });
-
-    const messageId = response?.headers ? response.headers['x-message-id'] || response.headers['x-sendgrid-message-id'] : undefined;
-    console.log(`✓ Email sent to ${to} - ${group_name} (SendGrid id: ${messageId || 'n/a'})`);
-    return { ok: true, id: messageId };
-  } catch (error) {
-    const errMsg = error?.response?.body?.errors?.[0]?.message || error.message;
-    console.error(`✗ Email send failed to ${to}:`, errMsg);
-    return { ok: false, error: errMsg };
-  }
+  return { htmlBody: html, textBody: text, subject: GROUP_SUBJECTS[group] };
 }
-
-module.exports = {
-  sendGroupEmail,
-};

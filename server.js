@@ -11,6 +11,7 @@ const { db, statements } = require('./db/init');
 const { sendGroupEmail } = require('./email');
 const { syncStudentRow, syncAllStudents } = require('./sheets');
 const { getPackLinks, PACKS_DIR } = require('./pack-manager');
+const { isForcedAi } = require('./forced-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -206,8 +207,10 @@ app.post('/randomise', publicRateLimit, async (req, res) => {
 
     // Check if student already exists
     const existing = statements.findByCode.get(code);
+    const forcedAi = isForcedAi(code);
+    const timestamp = now();
 
-    if (existing && existing.group_name) {
+    if (existing && existing.group_name && (!forcedAi || existing.group_name === 'AI')) {
       const packLinks = buildPackLinks(existing.group_name, req);
       syncStudentSheetByCode(code);
       // Already assigned - return existing assignment
@@ -219,9 +222,8 @@ app.post('/randomise', publicRateLimit, async (req, res) => {
       });
     }
 
-    // New assignment needed
-    const assignedGroup = randomiseGroup();
-    const timestamp = now();
+    // New or forced assignment needed
+    const assignedGroup = forcedAi ? 'AI' : randomiseGroup();
 
     if (existing) {
       // Student exists but no group assigned yet - update group and email
@@ -251,7 +253,7 @@ app.post('/randomise', publicRateLimit, async (req, res) => {
     syncStudentSheetByCode(code);
 
     return res.json({
-      already_assigned: false,
+      already_assigned: Boolean(existing && existing.group_name && !forcedAi),
       group_name: assignedGroup,
       group_label: GROUP_LABELS[assignedGroup],
       pdf_url: packLinks.client,

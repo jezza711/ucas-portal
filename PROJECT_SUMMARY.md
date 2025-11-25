@@ -63,11 +63,14 @@ Server runs on: http://localhost:3000
 
 ### ✅ Admin Dashboard
 - Basic Auth protected routes
-- CSV upload with upsert functionality
-- Advanced search by UCAS code and/or group
+- Search by UCAS code, email, and/or group
 - Full data export to CSV
 - Clean tabular results display
-- Upload/update student emails
+
+### ✅ Forced AI List
+- Optional newline-delimited file (config/forced-ai.txt or env override)
+- Codes in the list always receive the AI group and bypass randomisation
+- Existing VIDEO assignments are corrected to AI the next time the student checks in
 
 ### ✅ Webhooks
 - **JISC Webhook** (`POST /api/jisc-webhook`)
@@ -112,7 +115,6 @@ Server runs on: http://localhost:3000
 | `/randomise` | POST | None | Randomise student to group |
 | `/health` | GET | None | Health check |
 | `/admin` | GET | Basic Auth | Admin dashboard UI |
-| `/admin/upload` | POST | Basic Auth | Upload CSV |
 | `/admin/search` | GET | Basic Auth | Search students |
 | `/admin/export.csv` | GET | Basic Auth | Export all data |
 | `/api/jisc-webhook` | POST | Webhook Secret | JISC student upsert |
@@ -175,15 +177,15 @@ EMAIL_FROM=noreply@yourdomain.com
 
 VIDEO_PDF_URL=https://yourdomain.com/pdfs/video-course-pack.pdf
 AI_PDF_URL=https://yourdomain.com/pdfs/ai-group-pack.pdf
+FORCED_AI_FILE=/opt/render/project/src/config/forced-ai.txt
 ```
 
 ## 📝 Common Tasks
 
-### Add Students via CSV
-1. Create CSV with columns: `ucas_code,email`
-2. Visit http://localhost:3000/admin
-3. Upload file
-4. Students will be created (no group assigned until they visit portal)
+### Force Certain Students Into AI
+1. Add UCAS codes (one per line) to `config/forced-ai.txt` or point `FORCED_AI_FILE` to a file on your persistent disk.
+2. Redeploy or restart the service so the file is re-read.
+3. Those students will bypass randomisation and be assigned the AI group (with the usual email + Sheets sync) the next time they use the portal.
 
 ### Search Students
 - Admin dashboard → Search form
@@ -240,7 +242,7 @@ Invoke-WebRequest -Uri "http://localhost:3000/api/hooks/send-pack" `
 ✅ Running `node server.js` starts app on PORT with no runtime errors  
 ✅ New UCAS codes randomise correctly and persist  
 ✅ Re-submit of same code shows fixed message with correct group  
-✅ CSV upload creates or updates records  
+✅ Forced AI allow-list bypasses randomisation when configured  
 ✅ JISC webhook upserts records with secret auth only  
 ✅ send-pack webhook sends email and returns JSON  
 ✅ Admin search returns JSON and export returns CSV  

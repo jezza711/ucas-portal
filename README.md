@@ -6,6 +6,7 @@ A simple web application that randomises students into VIDEO or AI groups based 
 
 - **Student Portal**: Enter UCAS code, get assigned to a group, receive PDF link
 - **Admin Dashboard**: Search records, export data
+- **Forced Assignments**: Optional allow-list to guarantee certain UCAS codes receive AI
 - **Webhooks**: JISC integration and email trigger endpoints
 - **Email**: Automatic pack delivery via SendGrid
 - **Database**: SQLite with persistent storage
@@ -41,6 +42,7 @@ cp .env.example .env
 - `SENDGRID_API_KEY` (or legacy `RESEND_API_KEY`) - for email delivery (optional during development)
 - `EMAIL_FROM` - sender email address
 - `VIDEO_PDF_URL` and `AI_PDF_URL` - links to course pack PDFs
+- `FORCED_AI_FILE` (optional) - absolute path to the newline-delimited UCAS list that must always join AI
 
 ### 3. Run the Application
 
@@ -75,6 +77,16 @@ Visit `http://localhost:3000/admin` (requires Basic Auth: username and password 
 **Features:**
 - Search by UCAS code, email address, or group name
 - Export all records as CSV
+
+### Forced AI List
+
+If you have a list of students who must always receive the AI group:
+
+1. Add their UCAS codes (one per line) to `config/forced-ai.txt`, or set `FORCED_AI_FILE` to a custom path (ideal for Render disks).
+2. Redeploy or restart the server so it reloads the file.
+3. When those students use the portal they bypass randomisation and are assigned the AI pack automatically (even if they had previously been sent the VIDEO pack). Everyone else remains 50/50 random.
+
+> Lines beginning with `#` are treated as comments. Keep the file on your persistent disk so the list survives redeploys.
 
 ### Webhooks
 
