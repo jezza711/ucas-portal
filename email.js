@@ -128,19 +128,20 @@ function buildEmailTemplates({ group, groupLabel, ucas_code }) {
           <p>UCAS Personal ID: <strong>${ucas_code}</strong></p>
           <p>Congratulations! You have been allocated to the <strong>Video Course group</strong> for our national study on interview preparation. You now have free access to the Medical Interview Video Course until May 2026, featuring 50+ hours of structured lessons covering MMI, panel, and Oxbridge interviews.</p>
 
-          <div class="info-box">
-            <strong>Activate your access:</strong>
-            <ol>
-              <li>Sign up: <a href="https://courses.theaspiringmedics.co.uk/p/medicine-interview-course">https://courses.theaspiringmedics.co.uk/p/medicine-interview-course</a></li>
-              <li>Enter coupon code: <strong>VIDEO</strong></li>
-            </ol>
-          </div>
-
-          <p>Your resources:</p>
+          <p>Please watch the video and read the brochure in full:</p>
           <ul>
             <li>🚀 Induction video: <a href="https://youtu.be/mqdV7OEE7VY">https://youtu.be/mqdV7OEE7VY</a></li>
             <li>🌟 Video Course brochure: <a href="https://drive.google.com/file/d/15KiBt4QEY02f50QRaqYnnOFOBOqzBoEM/view?usp=sharing">View brochure</a></li>
           </ul>
+
+          <div class="info-box">
+            <strong>To activate your access:</strong>
+            <ol>
+              <li>Sign up here: <a href="https://courses.theaspiringmedics.co.uk/p/medicine-interview-course">https://courses.theaspiringmedics.co.uk/p/medicine-interview-course</a></li>
+              <li>Enter the coupon code: <strong>VIDEO</strong></li>
+              <li>Log in here: <a href="https://courses.theaspiringmedics.co.uk/courses/1238867/lectures/51544174">https://courses.theaspiringmedics.co.uk/courses/1238867/lectures/51544174</a></li>
+            </ol>
+          </div>
 
           <p>This course is designed to help you master every interview format with guided walkthroughs, exemplar answers, and step-by-step drills.</p>
 
@@ -154,12 +155,16 @@ function buildEmailTemplates({ group, groupLabel, ucas_code }) {
 
 UCAS Personal ID: ${ucas_code}
 
-You now have free access to the Medical Interview Video Course until May 2026. Activate access:
-- Sign up: https://courses.theaspiringmedics.co.uk/p/medicine-interview-course
-- Enter coupon code: VIDEO
+You now have free access to the Medical Interview Video Course until May 2026.
 
-Induction video: https://youtu.be/mqdV7OEE7VY
-Video Course brochure: https://drive.google.com/file/d/15KiBt4QEY02f50QRaqYnnOFOBOqzBoEM/view?usp=sharing
+Please watch the video and read the brochure in full:
+🚀 Induction video: https://youtu.be/mqdV7OEE7VY
+🌟 Video Course brochure: https://drive.google.com/file/d/15KiBt4QEY02f50QRaqYnnOFOBOqzBoEM/view?usp=sharing
+
+To activate your access:
+1) Sign up here: https://courses.theaspiringmedics.co.uk/p/medicine-interview-course
+2) Enter the coupon code: VIDEO
+3) Log in here: https://courses.theaspiringmedics.co.uk/courses/1238867/lectures/51544174
 
 The course includes 50+ hours of structured lessons for MMI, panel, and Oxbridge interviews.
 
@@ -227,20 +232,20 @@ Outreach@theaspiringmedics.co.uk`.trim();
           <p>UCAS Personal ID: <strong>${ucas_code}</strong></p>
           <p>Congratulations! You’ve been allocated to the <strong>AVA group</strong> for our national study on medical interview preparation. You now receive <strong>free access to AVA</strong>, your AI interview coach, until May 2026.</p>
 
+          <p>Please watch the video and read the brochure in full:</p>
+          <ul>
+            <li>🚀 Induction video: <a href="https://youtu.be/JSWoEZXdo90">https://youtu.be/JSWoEZXdo90</a></li>
+            <li>🌟 AVA brochure: <a href="https://drive.google.com/file/d/1p8MntMcR-HJxHPNbvD05aCoZ4-xItE4c/view?usp=sharing">View brochure</a></li>
+          </ul>
+
           <div class="info-box">
-            <strong>Important:</strong> please complete the steps using the same email address you entered on the portal (all lowercase / uncapitalised).
+            <strong>Important:</strong> To activate your access, please ensure you use the same email address (uncapitalised) that you used in the surveys.
           </div>
 
           <ol class="steps">
+            <li>Register here: <a href="https://ai.theaspiringmedics.co.uk/register">https://ai.theaspiringmedics.co.uk/register</a></li>
             <li>Sign up here: <a href="https://buy.stripe.com/4gMcN55nBdgo04o63f6c009">https://buy.stripe.com/4gMcN55nBdgo04o63f6c009</a></li>
-            <li>Register your account: <a href="https://ai.theaspiringmedics.co.uk/register">https://ai.theaspiringmedics.co.uk/register</a></li>
           </ol>
-
-          <p>Helpful resources:</p>
-          <ul>
-            <li>🚀 Induction video: <a href="https://youtu.be/k8gcNcML5Xk">https://youtu.be/k8gcNcML5Xk</a></li>
-            <li>🌟 AVA brochure: <a href="https://drive.google.com/file/d/1IfTXBnx1h0QkWxauIreFGKC-VlnnUy_a/view?usp=sharing">View brochure</a></li>
-          </ul>
 
           <p>AVA lets you practise MMI and panel interviews with real-time feedback, available 24/7. We’re excited to have you on the programme!</p>
 
@@ -254,12 +259,15 @@ Outreach@theaspiringmedics.co.uk`.trim();
 
 UCAS Personal ID: ${ucas_code}
 
-You now have free access to AVA, your AI interview coach, until May 2026. Please complete these steps using the same (lowercase) email you entered on the portal:
-1) Sign up: https://buy.stripe.com/4gMcN55nBdgo04o63f6c009
-2) Register: https://ai.theaspiringmedics.co.uk/register
+You now have free access to AVA, your AI interview coach, until May 2026.
 
-Induction video: https://youtu.be/k8gcNcML5Xk
-AVA brochure: https://drive.google.com/file/d/1IfTXBnx1h0QkWxauIreFGKC-VlnnUy_a/view?usp=sharing
+Please watch the video and read the brochure in full:
+🚀 Induction video: https://youtu.be/JSWoEZXdo90
+🌟 AVA brochure: https://drive.google.com/file/d/1p8MntMcR-HJxHPNbvD05aCoZ4-xItE4c/view?usp=sharing
+
+To activate your access, please ensure you use the same email address (uncapitalised) that you used in the surveys:
+1) Register here: https://ai.theaspiringmedics.co.uk/register
+2) Sign up here: https://buy.stripe.com/4gMcN55nBdgo04o63f6c009
 
 AVA lets you practise MMI and panel interviews with real-time feedback. Welcome aboard!
 
