@@ -257,12 +257,12 @@
         if (response.ok) {
           if (data.already_assigned) {
             showMessage('info', `ℹ️ You've already been assigned to the ${data.group_label}.`, 
-              `If you can't find your pack, contact your course administrator.`,
+              `If you can't find your pack, please check your junk or spam folder.<br>If you still can't find it, contact your course administrator.`,
               data.pdf_url
             );
           } else {
             showMessage('success', '✅ Assignment Complete!', 
-              `You've been assigned to the <strong>${data.group_label}</strong>.<br>A confirmation email with your course pack has been sent to <strong>${email}</strong>.`,
+              `You've been assigned to the <strong>${data.group_label}</strong>.<br>A confirmation email with your course pack has been sent to <strong>${email}</strong>.<br><em>Please check your junk or spam folder if you don't see it in your inbox.</em>`,
               data.pdf_url
             );
           }
